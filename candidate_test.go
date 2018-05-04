@@ -35,11 +35,27 @@ func TestCandidate(t *testing.T) {
 	assert.True(t, candidate.IsLeader())
 
 	// Signaling a lost lock should get us de-elected...
-	close(lostCh)
+	lostCh <- struct{}{}
 	assert.False(t, <-electedCh)
 
 	// And we should attempt to get re-elected again.
 	assert.True(t, <-electedCh)
+	assert.True(t, candidate.IsLeader())
+
+	// When we suspend, we only receive de-election
+	go candidate.Suspend()
+	assert.False(t, <-electedCh)
+	assert.False(t, candidate.IsLeader())
+
+	// Enter election again
+	electedCh, _ = candidate.RunForElection()
+
+	// Should issue a false upon start, no matter what.
+	assert.False(t, <-electedCh)
+
+	// Since the lock always succeeeds, we should get elected.
+	assert.True(t, <-electedCh)
+	assert.True(t, candidate.IsLeader())
 
 	// When we resign, unlock will get called, we'll be notified of the
 	// de-election and we'll try to get the lock again.

@@ -21,6 +21,7 @@ type Candidate struct {
 	lock      sync.Mutex
 	lockTTL   time.Duration
 	leader    bool
+	suspendCh    chan bool
 	stopCh    chan struct{}
 	stopRenew chan struct{}
 	resignCh  chan bool
@@ -38,6 +39,7 @@ func NewCandidate(client store.Store, key, node string, ttl time.Duration) *Cand
 		lockTTL:  ttl,
 		resignCh: make(chan bool),
 		stopCh:   make(chan struct{}),
+		suspendCh:   make(chan bool),
 	}
 }
 
@@ -64,6 +66,12 @@ func (c *Candidate) RunForElection() (<-chan bool, <-chan error) {
 // Stop running for election.
 func (c *Candidate) Stop() {
 	close(c.stopCh)
+	close(c.suspendCh)
+}
+
+// Suspend running for election.
+func (c *Candidate) Suspend() {
+	c.suspendCh <- true
 }
 
 // Resign forces the candidate to step-down and try again.
@@ -137,10 +145,18 @@ func (c *Candidate) campaign() {
 			// We were asked to resign, give up the lock and go back
 			// campaigning.
 			lock.Unlock()
+			c.stopRenew = nil
+		case <-c.suspendCh:
+			// Give up the leadership and suspend.
+			lock.Unlock()
+		    c.stopRenew = nil
+		    c.update(false)
+			return
 		case <-c.stopCh:
 			// Give up the leadership and quit.
 			if c.leader {
 				lock.Unlock()
+				c.stopRenew = nil
 			}
 			return
 		case <-lostCh:
