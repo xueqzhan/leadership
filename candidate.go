@@ -149,8 +149,8 @@ func (c *Candidate) campaign() {
 		case <-c.suspendCh:
 			// Give up the leadership and suspend.
 			lock.Unlock()
-		    c.stopRenew = nil
-		    c.update(false)
+			c.stopRenew = nil
+			c.update(false)
 			return
 		case <-c.stopCh:
 			// Give up the leadership and quit.
